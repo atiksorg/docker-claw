@@ -9,7 +9,7 @@ module.exports = {
     PG_HOST: process.env.PG_HOST || '172.17.0.1',
     PG_PORT: process.env.PG_PORT || 5432,
     PG_USER: process.env.PG_USER || 'postgres',
-    PG_PASSWORD: process.env.PG_PASSWORD || 'vbsYQjHGfDytLVpu5',
+    PG_PASSWORD: process.env.PG_PASSWORD || 'XXXXXXXXXXXXXXXXXXX',
     
     // Storage (абсолютные пути для надёжного монтирования в Docker)
     DATA_ROOT: path.resolve(process.env.DATA_ROOT || '/var/sandbox-data'),
