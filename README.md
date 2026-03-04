@@ -12,7 +12,7 @@ Docker-Claw allows users to run bash commands in isolated Docker environments, m
 
 - **Web Dashboard**: Manage sessions, files, AI prompts, channels (Telegram, Email), tasks, skills, apps.
 - **Telegram Bot**: Full control via bot – execute commands, AI chat, file send/receive, status checks.
-- **AI Router**: LLM (configurable model/token) processes natural language into bash commands with context awareness.
+- **ProTalk Router**: Advanced LLM (configurable model/token) processes natural language into bash commands with full context awareness and multi-turn conversational support, integrated with Telegram bot and web UI.
 - **Docker Sandboxes**: Per-user isolated containers with persistent `/workspace`.
 - **PostgreSQL Backend**: Sessions, balances, snapshots, plans, user data.
 - **File Management**: Upload/download, snapshots, diffs.
@@ -117,7 +117,7 @@ AI mode: Bot uses LLM to interpret & execute.
 |---------|-------------|
 | `docker.service.js` | Manages user containers. |
 | `session.service.js` | Exec commands, persist history. |
-| `ai_router_service.js` | LLM routing with tools. |
+| `ai_router_service.js` | **ProTalk Router**: LLM routing with tools for conversational AI, handling natural language to bash execution. |
 | `balance.service.js` | Token/usage tracking. |
 | `plan.service.js` | Execution plans. |
 
