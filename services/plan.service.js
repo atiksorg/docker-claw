@@ -1,6 +1,8 @@
 const fs = require('fs').promises;
 const path = require('path');
 const storageService = require('./storage.service');
+const dockerService = require('./docker.service');
+const sessionService = require('./session.service');
 
 /**
  * Получает путь к директории планов пользователя
@@ -35,6 +37,26 @@ async function createPlan(chatId, goal, steps) {
     content += `\n## Debug Log\n`;
     
     await fs.writeFile(planPath, content, 'utf8');
+
+    // Копируем план в контейнер, если он активен
+    const session = sessionService.getSession(chatId);
+    if (session && session.containerId) {
+        try {
+            const planFileName = `plan_${planId}.md`;
+            const remotePath = `/workspace/plans/${planFileName}`;
+            
+            // Гарантируем наличие папки в контейнере
+            await dockerService.executeInContainer(session.containerId, 'mkdir -p /workspace/plans');
+            
+            // Копируем файл
+            await dockerService.copyToContainer(planPath, session.containerId, remotePath);
+            console.log(`[PLAN] Plan ${planId} copied to container ${session.containerId}`);
+        } catch (error) {
+            console.error(`[PLAN] Failed to copy plan ${planId} to container for chat ${chatId}:`, error);
+            // Не бросаем ошибку, т.к. основной план уже сохранен на хосте
+        }
+    }
+
     return planId;
 }
 
@@ -314,6 +336,44 @@ async function deletePlan(chatId, planId) {
 }
 
 /**
+ * Парсит шаги плана из markdown-содержимого
+ * Возвращает массив {text, status}
+ */
+function parsePlanSteps(content) {
+    const steps = [];
+    const lines = content.split('\n');
+    let inSteps = false;
+    
+    for (const line of lines) {
+        if (line.startsWith('## Steps')) {
+            inSteps = true;
+            continue;
+        }
+        if (inSteps && line.startsWith('## Debug Log')) {
+            break;
+        }
+        
+        if (inSteps) {
+            // Ищем строки вида "1. [ ] Описание" или "1. [x] Описание" или "1. [~] Описание"
+            const match = line.match(/^\s*\d+(?:\.\d+)*\.\s+\[(.)\]\s+(.+)$/);
+            if (match) {
+                const statusChar = match[1];
+                const text = match[2].trim();
+                
+                let status = 'pending';
+                if (statusChar === 'x') status = 'done';
+                else if (statusChar === '~') status = 'in_progress';
+                else if (statusChar === '!') status = 'error';
+                
+                steps.push({ text, status });
+            }
+        }
+    }
+    
+    return steps;
+}
+
+/**
  * Удаляет все завершённые (DONE) и отменённые (PAUSED) планы
  * Возвращает количество удалённых планов
  */
@@ -374,4 +434,5 @@ module.exports = {
     getPlansSummary,
     deletePlan,
     cleanupCompletedPlans,
+    parsePlanSteps,
 };

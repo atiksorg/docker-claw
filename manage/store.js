@@ -749,6 +749,141 @@ function getAIRouterStats(chatId) {
     };
 }
 
+// ====================== API TASKS (задачи от внешних API) ======================
+/**
+ * Создаёт новую API-задачу и возвращает её ID
+ */
+function createApiTask(chatId, taskData) {
+    if (!statesCache[chatId]) statesCache[chatId] = {};
+    if (!statesCache[chatId].apiTasks) statesCache[chatId].apiTasks = {};
+    
+    const taskId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    
+    statesCache[chatId].apiTasks[taskId] = {
+        id: taskId,
+        chatId,
+        userId: taskData.user_id || null,
+        projectName: taskData.project_name || null,
+        task: taskData.task || '',
+        status: 'queued', // queued, running, completed, failed
+        steps: [], // [{text, status: 'pending'|'in_progress'|'done'|'error'}]
+        summary: null,
+        htmlReport: null,
+        filesToSend: [],
+        usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+        },
+        error: null,
+        createdAt: Date.now(),
+        startedAt: null,
+        completedAt: null
+    };
+    
+    persist(chatId);
+    return taskId;
+}
+
+/**
+ * Получает API-задачу по ID
+ */
+function getApiTask(chatId, taskId) {
+    const data = statesCache[chatId];
+    if (!data || !data.apiTasks) return null;
+    return data.apiTasks[taskId] || null;
+}
+
+/**
+ * Обновляет API-задачу
+ */
+function updateApiTask(chatId, taskId, updates) {
+    if (!statesCache[chatId] || !statesCache[chatId].apiTasks) return false;
+    if (!statesCache[chatId].apiTasks[taskId]) return false;
+    
+    statesCache[chatId].apiTasks[taskId] = {
+        ...statesCache[chatId].apiTasks[taskId],
+        ...updates
+    };
+    
+    persist(chatId);
+    return true;
+}
+
+/**
+ * Получает все API-задачи для chatId
+ */
+function getApiTasks(chatId, limit = 50) {
+    const data = statesCache[chatId];
+    if (!data || !data.apiTasks) return [];
+    
+    return Object.values(data.apiTasks)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, limit);
+}
+
+/**
+ * Удаляет старые завершённые задачи (старше 24 часов)
+ */
+function cleanupOldApiTasks(chatId) {
+    if (!statesCache[chatId] || !statesCache[chatId].apiTasks) return 0;
+    
+    const maxAge = 24 * 60 * 60 * 1000; // 24 часа
+    const now = Date.now();
+    let deleted = 0;
+    
+    for (const taskId of Object.keys(statesCache[chatId].apiTasks)) {
+        const task = statesCache[chatId].apiTasks[taskId];
+        if ((task.status === 'completed' || task.status === 'failed') && 
+            task.completedAt && (now - task.completedAt > maxAge)) {
+            delete statesCache[chatId].apiTasks[taskId];
+            deleted++;
+        }
+    }
+    
+    if (deleted > 0) persist(chatId);
+    return deleted;
+}
+
+// ====================== AGENT STATE (для продолжения после лимита) ======================
+/**
+ * Сохраняет состояние агента для продолжения после лимита шагов
+ */
+function setAgentState(chatId, agentState) {
+    if (!statesCache[chatId]) statesCache[chatId] = {};
+    statesCache[chatId].agentState = agentState;
+    return persist(chatId);
+}
+
+/**
+ * Получает сохранённое состояние агента
+ */
+function getAgentState(chatId) {
+    const data = statesCache[chatId];
+    if (!data || !data.agentState) return null;
+    
+    // Проверяем, не устарело ли состояние (старше 10 минут)
+    const maxAge = 10 * 60 * 1000; // 10 минут
+    if (Date.now() - (data.agentState.timestamp || 0) > maxAge) {
+        // Устарело — удаляем
+        delete statesCache[chatId].agentState;
+        persist(chatId);
+        return null;
+    }
+    
+    return data.agentState;
+}
+
+/**
+ * Очищает сохранённое состояние агента
+ */
+function clearAgentState(chatId) {
+    if (statesCache[chatId] && statesCache[chatId].agentState) {
+        delete statesCache[chatId].agentState;
+        return persist(chatId);
+    }
+}
+
 module.exports = {
     getState,
     getByToken,
@@ -799,5 +934,13 @@ module.exports = {
     addAIRouterLog,
     getAIRouterLogs,
     clearAIRouterLogs,
-    getAIRouterStats
+    getAIRouterStats,
+    setAgentState,
+    getAgentState,
+    clearAgentState,
+    createApiTask,
+    getApiTask,
+    updateApiTask,
+    getApiTasks,
+    cleanupOldApiTasks
 };

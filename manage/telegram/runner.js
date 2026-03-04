@@ -549,8 +549,15 @@ async function handleTextMessage(ctx, chatId) {
                     }
                 };
 
+                // Проверяем, есть ли сохранённое состояние для продолжения
+                const savedState = manageStore.getAgentState(chatId);
+                const continueOptions = savedState ? {
+                    startIteration: savedState.iteration || 0,
+                    previousState: savedState.state || null
+                } : {};
+
                 // Запускаем агентский loop
-                const result = await enqueue(chatId, () => executeAgentLoop(chatId, data, messages, tools, agentCtx));
+                const result = await enqueue(chatId, () => executeAgentLoop(chatId, data, messages, tools, agentCtx, 15, continueOptions));
 
                 // Сохраняем историю (без system prompt)
                 const messagesToSave = messages.filter(m => m.role !== 'system');
@@ -560,7 +567,26 @@ async function handleTextMessage(ctx, chatId) {
                     return await sendReply(ctx, tgChatId, `❌ Ошибка: ${result.error}`, tgChatId);
                 }
 
-                const { summary, html_report, filesToSend = [] } = result;
+                const { summary, html_report, filesToSend = [], limitReached, iteration, state } = result;
+                
+                // Если достигнут лимит — сохраняем состояние для продолжения
+                if (limitReached && iteration !== undefined) {
+                    manageStore.setAgentState(chatId, {
+                        iteration,
+                        state: {
+                            workflowState: state?.workflowState || { planCreated: workflowState?.planCreated || false },
+                            cachedProjectTree: state?.cachedProjectTree || null,
+                            connectivityChecked: state?.connectivityChecked || false,
+                            totalPromptTokens: state?.totalPromptTokens || 0,
+                            totalCompletionTokens: state?.totalCompletionTokens || 0,
+                            totalTokens: state?.totalTokens || 0
+                        },
+                        timestamp: Date.now()
+                    });
+                } else {
+                    // Если задача завершена — очищаем сохранённое состояние
+                    manageStore.clearAgentState(chatId);
+                }
 
                 // Отправляем файлы если они есть
                 if (filesToSend.length > 0) {

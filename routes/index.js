@@ -8,6 +8,8 @@ const databaseRoutes = require('./database.routes');
 const manageRoutes = require('../manage/routes');
 const plansRoutes = require('./plans.routes');
 const appsRoutes = require('./apps.routes');
+const configRoutes = require('./config.routes');
+const agentRoutes = require('../manage/agent.routes');
 
 router.use('/session', sessionRoutes);
 router.use('/execute', executeRoutes);
@@ -16,6 +18,10 @@ router.use('/database', databaseRoutes);
 router.use('/manage', manageRoutes);
 router.use('/plans', plansRoutes);
 router.use('/apps', appsRoutes);
+router.use('/config', configRoutes);
+
+// Agent API routes (with :chatId parameter)
+router.use('/:chatId', agentRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

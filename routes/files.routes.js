@@ -46,10 +46,11 @@ router.get('/:chat_id', async (req, res) => {
             `find ${directory} -maxdepth 1 \\( -type d -o -type f \\) -exec sh -c 'if [ -d "$1" ]; then echo "d|$1"; else echo "f|$1"; fi' _ {} \\; 2>/dev/null`
         );
         
-        // 2. Содержимое рабочих папок (input, output, work, log, tmp, apps, plans)
+        // 2. Содержимое рабочих папок (из config.js)
+        const folderNames = config.WORKSPACE_STRUCTURE.map(f => f.name).join(' ');
         const foldersResult = await dockerService.executeInContainer(
             session.containerId,
-            `for dir in input output work log tmp apps plans; do find ${directory}/$dir -maxdepth 4 \\( -type d -o -type f \\) -exec sh -c 'if [ -d "$1" ]; then echo "d|$1"; else echo "f|$1"; fi' _ {} \\; 2>/dev/null; done`
+            `for dir in ${folderNames}; do find ${directory}/$dir -maxdepth 8 \\( -type d -o -type f \\) -exec sh -c 'if [ -d "$1" ]; then echo "d|$1"; else echo "f|$1"; fi' _ {} \\; 2>/dev/null; done`
         );
         
         // 3. Модули - только первый уровень

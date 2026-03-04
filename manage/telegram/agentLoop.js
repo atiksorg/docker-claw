@@ -75,7 +75,7 @@ function sanitizeMessagesForAPI(messages) {
         });
     }
 
-    // Шаг 5: первое сообщение не должно быть role:'tool' — сдвигаем до первого user/assistant
+    // Шаг 5: первое сообщение ��е должно быть role:'tool' — сдвигаем до первого user/assistant
     while (filtered.length > 0 && filtered[0].role === 'tool') {
         console.warn('[SANITIZE] Removing leading tool message');
         filtered.shift();
@@ -341,7 +341,22 @@ async function handleTaskCompleted(messages, toolCall, toolArgs, pendingFiles, c
     return { summary, html_report, filesToSend: pendingFiles };
 }
 
-async function executeAgentLoop(chatId, data, messages, tools, agentCtx, maxIterations = 15) {
+/**
+ * Выполняет агентский цикл.
+ * 
+ * @param {string} chatId - ID сессии
+ * @param {object} data - данные сессии (токены, модель и т.д.)
+ * @param {array} messages - история сообщений
+ * @param {array} tools - доступные инструменты
+ * @param {object} agentCtx - контекст агента (callback-функции для UI)
+ * @param {number} maxIterations - максимальное количество итераций
+ * @param {object} options - дополнительные опции
+ * @param {number} options.startIteration - начальная итерация (для продолжения после лимита)
+ * @param {object} options.previousState - предыдущее состояние (workflowState, токены и т.д.)
+ */
+async function executeAgentLoop(chatId, data, messages, tools, agentCtx, maxIterations = 15, options = {}) {
+    const { startIteration = 0, previousState = null } = options;
+    
     const pendingFiles = [];
     let errorCount = 0;
     let emptyCount = 0;
@@ -357,26 +372,37 @@ async function executeAgentLoop(chatId, data, messages, tools, agentCtx, maxIter
     let readBeforePlan = 0;   // счётчик чтений до первого create_plan
     let planCreated = false;  // флаг: create_plan или create_task_plan уже был вызван
     // Workflow state для передачи в dispatchTool (code barriers)
-    const workflowState = { planCreated: false };
+    const workflowState = previousState?.workflowState || { planCreated: false };
     // Кэш дерева проекта: вычисляется один раз при первом request_context,
     // при повторных вызовах (need_more=true) передаётся из кэша — экономим ~200 строк токенов.
-    let cachedProjectTree = null;
+    let cachedProjectTree = previousState?.cachedProjectTree || null;
     // Флаг: была ли уже проведена connectivity-проверка в этой сессии.
     // Устанавливается в true после первого task_completed(verified:false) с connectivity-чеклистом,
     // чтобы при verified:true не требовать её повторно.
-    let connectivityChecked = false;
+    let connectivityChecked = previousState?.connectivityChecked || false;
 
-    // Счётчики токенов за всю сессию
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
-    let totalTokens = 0;
+    // Счётчики токенов за всю сессию (восстанавливаем из previousState при продолжении)
+    let totalPromptTokens = previousState?.totalPromptTokens || 0;
+    let totalCompletionTokens = previousState?.totalCompletionTokens || 0;
+    let totalTokens = previousState?.totalTokens || 0;
+
+    // Восстанавливаем состояние planCreated из истории сообщений
+    if (!planCreated && messages.some(m => 
+        m.role === 'assistant' && 
+        Array.isArray(m.tool_calls) && 
+        m.tool_calls.some(tc => tc.function?.name === 'create_plan' || tc.function?.name === 'create_task_plan')
+    )) {
+        planCreated = true;
+        workflowState.planCreated = true;
+    }
 
     console.log(`\n${'═'.repeat(60)}`);
-    console.log(`[AGENT-LOOP] ▶ START  chatId=${chatId}  model=${data.aiModel || '?'}  mode=${agentCtx?.channel || '?'}`);
-    console.log(`[AGENT-LOOP]   history=${messages.length} msgs  maxIter=${maxIterations}`);
+    console.log(`[AGENT-LOOP] ▶ ${startIteration > 0 ? 'CONTINUE' : 'START'}  chatId=${chatId}  model=${data.aiModel || '?'}  mode=${agentCtx?.channel || '?'}`);
+    console.log(`[AGENT-LOOP]   history=${messages.length} msgs  startIter=${startIteration}  maxIter=${maxIterations}`);
+    console.log(`[AGENT-LOOP]   restored: planCreated=${planCreated} connectivityChecked=${connectivityChecked}`);
     console.log(`${'═'.repeat(60)}`);
 
-    for (let i = 0; i < maxIterations; i++) {
+    for (let i = startIteration; i < startIteration + maxIterations; i++) {
         let resp;
         try {
             const before = messages.length;
@@ -717,6 +743,15 @@ async function executeAgentLoop(chatId, data, messages, tools, agentCtx, maxIter
     return {
         summary: 'Достигнут лимит шагов. Продолжить выполнение?',
         limitReached: true,
+        iteration: startIteration + maxIterations, // следующая итерация для продолжения
+        state: {
+            workflowState,
+            cachedProjectTree,
+            connectivityChecked,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens
+        },
         filesToSend: pendingFiles
     };
 }

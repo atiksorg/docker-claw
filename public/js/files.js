@@ -1,12 +1,31 @@
-const FOLDER_LABELS = {
-    input: { icon: '📥', title: 'input', desc: 'Входные файлы' },
-    output: { icon: '📤', title: 'output', desc: 'Итоговые результаты' },
-    work: { icon: '🔧', title: 'work', desc: 'Рабочие файлы' },
-    log: { icon: '📋', title: 'log', desc: 'Логи' },
-    tmp: { icon: '🗑️', title: 'tmp', desc: 'Временные' }
-};
+let FOLDER_LABELS = {};
+
+async function loadWorkspaceConfig() {
+    try {
+        const response = await fetch(`${API_URL}/config/workspace`);
+        const structure = await response.json();
+        
+        // Преобразуем массив в объект для быстрого доступа
+        for (const folder of structure) {
+            FOLDER_LABELS[folder.name] = { 
+                icon: folder.icon, 
+                title: folder.name, 
+                desc: folder.desc 
+            };
+        }
+    } catch (error) {
+        console.error('Error loading workspace config:', error);
+        // Фоллбэк на случай ошибки
+        FOLDER_LABELS = {
+            input: { icon: '📥', title: 'input', desc: 'Входные файлы' },
+            output: { icon: '📤', title: 'output', desc: 'Итоговые результаты' },
+            work: { icon: '🔧', title: 'work', desc: 'Рабочие файлы' },
+        };
+    }
+}
 
 async function onLoginSuccess() {
+    await loadWorkspaceConfig();
     await Promise.all([loadFiles(), loadDatabaseInfo(), loadDiskStats()]);
 }
 

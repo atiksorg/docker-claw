@@ -40,4 +40,15 @@ module.exports = {
     PROJECT_CACHE_MAX_FILES: parseInt(process.env.PROJECT_CACHE_MAX_FILES) || 5000, // макс. файлов в дереве
     PROJECT_CACHE_MAX_SUMMARY_SIZE: parseInt(process.env.PROJECT_CACHE_MAX_SUMMARY_SIZE) || 50000, // макс. размер summary
     PROJECT_CACHE_TTL_DAYS: parseInt(process.env.PROJECT_CACHE_TTL_DAYS) || 30, // время жизни кэша
+
+    // Структура рабочего пространства
+    WORKSPACE_STRUCTURE: [
+        { name: 'input', icon: '📥', desc: 'Входные файлы' },
+        { name: 'output', icon: '📤', desc: 'Итоговые результаты' },
+        { name: 'work', icon: '🔧', desc: 'Рабочие файлы' },
+        { name: 'log', icon: '📋', desc: 'Логи' },
+        { name: 'tmp', icon: '🗑️', desc: 'Временные' },
+        { name: 'apps', icon: '🚀', desc: 'Приложения' },
+        { name: 'plans', icon: '📝', desc: 'Планы' },
+    ],
 };
